@@ -1,0 +1,100 @@
+{
+  "name": "WF-04 - Error Handling",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "errortrigger-032",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json || {};\nlet message = String((data.error && data.error.message) || data.message || 'Unknown error');\nfor (const key of ['GROQ_API_KEY', 'N8N_WEBHOOK_SECRET', 'N8N_ENCRYPTION_KEY', 'APP_JWT_SECRET']) {\n  const value = $env[key];\n  if (value) message = message.split(value).join('[REDACTED]');\n}\nmessage = message\n  .replace(/(Bearer\\s+)[A-Za-z0-9._-]+/gi, '$1[REDACTED]')\n  .replace(/(api[_-]?key|password|secret|token)\\s*[=:]\\s*[^,\\s]+/gi, '$1=[REDACTED]')\n  .slice(0, 500);\nconst errorData = data.error || {};\nconst correlationId = errorData.correlationId || data.correlationId || null;\nreturn [{\n  json: {\n    callback: {\n      workflowName: String((data.workflow && data.workflow.name) || 'unknown-workflow').slice(0, 120),\n      correlationId: correlationId,\n      executionId: String((data.execution && data.execution.id) || '').slice(0, 120),\n      message: message\n    }\n  }\n}];"
+      },
+      "id": "code-033",
+      "name": "Sanitize Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_CALLBACK_URL + \"/error\" }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LeadFlow-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.callback) }}",
+        "options": {
+          "timeout": 20000
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1000
+      },
+      "id": "http-034",
+      "name": "Send Failure Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        80,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sanitize Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize Error": {
+      "main": [
+        [
+          {
+            "node": "Send Failure Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "version-038",
+  "id": "9f3c2a11-7b44-4e0d-9a1f-2c8e5d6b7a90",
+  "tags": [],
+  "pinData": {}
+}

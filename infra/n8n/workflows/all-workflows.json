@@ -1,0 +1,930 @@
+[
+  {
+    "name": "WF-01 - Prospect Qualification",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "leadflow/qualify",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-001",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -600,
+          0
+        ],
+        "webhookId": "wh-002"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const item = $input.first().json;\nconst headers = item.headers || {};\nconst expected = $env.N8N_WEBHOOK_SECRET || '';\nconst provided = headers['x-leadflow-secret'] || '';\nfunction safeEqual(a, b) {\n  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;\n  let diff = 0;\n  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;\n}\nfunction reject(message) {\n  return [{ json: { ok: false, responseCode: 401, response: { accepted: false, error: message } } }];\n}\nif (!expected || !safeEqual(provided, expected)) {\n  return reject('Unauthorized webhook call');\n}\nconst body = item.body || item;\nconst required = [\"prospectId\",\"correlationId\",\"companyName\",\"companyDescription\"];\nfor (const key of required) {\n  const value = body[key];\n  if (value === undefined || value === null || value === '') {\n    return reject('Missing required field: ' + key);\n  }\n}\nreturn [{ json: Object.assign({}, body, { ok: true }) }];"
+        },
+        "id": "code-003",
+        "name": "Verify and Validate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -360,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "condition-004",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": "true",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-005",
+        "name": "Is Authorized",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ctx = $('Verify and Validate').first().json;\nconst key = $env.GROQ_API_KEY;\nconst model = $env.GROQ_MODEL;\nconst base = ($env.LLM_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/+$/, '');\nif (!key) throw new Error('GROQ_API_KEY is not configured');\nif (!model) throw new Error('GROQ_MODEL is not configured');\nconst system = [\n  'You qualify B2B prospects for a small agency.',\n  'Use ONLY the facts supplied by the user. Never invent company information, budget, customers or outcomes.',\n  'Explicitly list missing information. Do not claim external verification.',\n  'Return ONLY a JSON object with keys: score (integer 0-100), category (HIGH/MEDIUM/LOW),',\n  'summary (string), strengths (string array), weaknesses (string array),',\n  'missingInformation (string array), recommendations (string array), confidence (HIGH/MEDIUM/LOW).',\n  'If information is insufficient, lower the score and confidence instead of guessing.'\n].join(' ');\nconst user = JSON.stringify({\n  prospectId: ctx.prospectId,\n  companyName: ctx.companyName,\n  contactName: ctx.contactName || null,\n  email: ctx.email || null,\n  website: ctx.website || null,\n  industry: ctx.industry || null,\n  companyDescription: ctx.companyDescription,\n  source: ctx.source || 'MANUAL'\n});\nconst body = {\n  model: model,\n  temperature: 0.1,\n  response_format: { type: 'json_object' },\n  messages: [{ role: 'system', content: system }, { role: 'user', content: user }]\n};\nif (String(model).indexOf('gpt-oss') >= 0) body.reasoning_effort = 'low';\nreturn [{ json: { llmUrl: base + '/chat/completions', llmBody: body } }];"
+        },
+        "id": "code-006",
+        "name": "Build LLM Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.llmUrl }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $env.GROQ_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.llmBody) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-007",
+        "name": "Call Groq",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          360,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ctx = $('Verify and Validate').first().json;\nfunction fail(message) {\n  return [{\n    json: {\n      callback: {\n        correlationId: ctx.correlationId,\n        prospectId: ctx.prospectId,\n        status: 'FAILURE',\n        errorMessage: String(message).slice(0, 500)\n      },\n      response: { accepted: false, correlationId: ctx.correlationId, error: 'Qualification failed' }\n    }\n  }];\n}\ntry {\n  const http = $input.first().json;\n  let content = http && http.choices && http.choices[0] && http.choices[0].message\n    ? http.choices[0].message.content : null;\n  if (!content) return fail('Invalid LLM response: no content');\n  content = String(content).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(content);\n  const rawScore = Number(parsed.score);\n  if (!Number.isFinite(rawScore)) return fail('Invalid score in LLM response');\n  const score = Math.max(0, Math.min(100, Math.round(rawScore)));\n  const category = score >= 70 ? 'HIGH' : score >= 40 ? 'MEDIUM' : 'LOW';\n  const list = (value) => Array.isArray(value)\n    ? value.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim().slice(0, 500)).slice(0, 20)\n    : [];\n  const rawConfidence = String(parsed.confidence || '').toUpperCase();\n  const confidence = ['HIGH', 'MEDIUM', 'LOW'].indexOf(rawConfidence) >= 0 ? rawConfidence : 'LOW';\n  const summary = String(parsed.summary || 'Assessment based only on the supplied information.').slice(0, 2000);\n  return [{\n    json: {\n      callback: {\n        correlationId: ctx.correlationId,\n        prospectId: ctx.prospectId,\n        status: 'SUCCESS',\n        score: score,\n        category: category,\n        summary: summary,\n        strengths: list(parsed.strengths),\n        weaknesses: list(parsed.weaknesses),\n        missingInformation: list(parsed.missingInformation),\n        recommendations: list(parsed.recommendations),\n        confidence: confidence,\n        modelName: $env.GROQ_MODEL || null,\n        promptVersion: ctx.promptVersion || 'v1'\n      },\n      response: { accepted: true, correlationId: ctx.correlationId, score: score, category: category }\n    }\n  }];\n} catch (error) {\n  return fail(error && error.message ? error.message : 'Invalid LLM JSON');\n}"
+        },
+        "id": "code-008",
+        "name": "Parse and Normalize",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.BACKEND_CALLBACK_URL + \"/qualification\" }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-LeadFlow-Secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.callback) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-009",
+        "name": "Send Qualification Callback",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          840,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}"
+        },
+        "id": "respond-010",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1080,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}",
+          "options": {
+            "responseCode": 401
+          }
+        },
+        "id": "respond-011",
+        "name": "Respond Unauthorized",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          120,
+          220
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Verify and Validate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify and Validate": {
+        "main": [
+          [
+            {
+              "node": "Is Authorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Authorized": {
+        "main": [
+          [
+            {
+              "node": "Build LLM Request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Unauthorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build LLM Request": {
+        "main": [
+          [
+            {
+              "node": "Call Groq",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Groq": {
+        "main": [
+          [
+            {
+              "node": "Parse and Normalize",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse and Normalize": {
+        "main": [
+          [
+            {
+              "node": "Send Qualification Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Qualification Callback": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "errorWorkflow": "9f3c2a11-7b44-4e0d-9a1f-2c8e5d6b7a90"
+    },
+    "versionId": "version-035",
+    "id": "1c4e7b30-9d2a-4f11-8c33-0a1b2c3d4e5f",
+    "tags": [],
+    "pinData": {}
+  },
+  {
+    "name": "WF-02 - Email Draft Generation",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "leadflow/email-draft",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-012",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -600,
+          0
+        ],
+        "webhookId": "wh-013"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const item = $input.first().json;\nconst headers = item.headers || {};\nconst expected = $env.N8N_WEBHOOK_SECRET || '';\nconst provided = headers['x-leadflow-secret'] || '';\nfunction safeEqual(a, b) {\n  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;\n  let diff = 0;\n  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;\n}\nfunction reject(message) {\n  return [{ json: { ok: false, responseCode: 401, response: { accepted: false, error: message } } }];\n}\nif (!expected || !safeEqual(provided, expected)) {\n  return reject('Unauthorized webhook call');\n}\nconst body = item.body || item;\nconst required = [\"prospectId\",\"correlationId\",\"companyDescription\",\"score\",\"category\",\"analysisSummary\"];\nfor (const key of required) {\n  const value = body[key];\n  if (value === undefined || value === null || value === '') {\n    return reject('Missing required field: ' + key);\n  }\n}\nreturn [{ json: Object.assign({}, body, { ok: true }) }];"
+        },
+        "id": "code-014",
+        "name": "Verify and Validate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -360,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "condition-015",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": "true",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-016",
+        "name": "Is Authorized",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ctx = $('Verify and Validate').first().json;\nconst key = $env.GROQ_API_KEY;\nconst model = $env.GROQ_MODEL;\nconst base = ($env.LLM_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/+$/, '');\nif (!key) throw new Error('GROQ_API_KEY is not configured');\nif (!model) throw new Error('GROQ_MODEL is not configured');\nconst system = [\n  'Write a short professional B2B outreach email draft in English.',\n  'Use only the supplied facts. Do not invent a previous relationship, results, promises or pricing.',\n  'If contact name is missing, start with \"Hello\".',\n  'Return ONLY a JSON object with keys subject (string) and body (string).',\n  'The draft must remain neutral and clearly based on the supplied information.'\n].join(' ');\nconst user = JSON.stringify({\n  companyName: ctx.companyName,\n  contactName: ctx.contactName || null,\n  email: ctx.email || null,\n  industry: ctx.industry || null,\n  companyDescription: ctx.companyDescription,\n  score: ctx.score,\n  category: ctx.category,\n  analysisSummary: ctx.analysisSummary,\n  recommendations: ctx.recommendations || [],\n  missingInformation: ctx.missingInformation || []\n});\nconst body = {\n  model: model,\n  temperature: 0.2,\n  response_format: { type: 'json_object' },\n  messages: [{ role: 'system', content: system }, { role: 'user', content: user }]\n};\nif (String(model).indexOf('gpt-oss') >= 0) body.reasoning_effort = 'low';\nreturn [{ json: { llmUrl: base + '/chat/completions', llmBody: body } }];"
+        },
+        "id": "code-017",
+        "name": "Build LLM Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.llmUrl }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $env.GROQ_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.llmBody) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-018",
+        "name": "Call Groq",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          360,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ctx = $('Verify and Validate').first().json;\nfunction fail(message) {\n  return [{\n    json: {\n      callback: {\n        correlationId: ctx.correlationId,\n        prospectId: ctx.prospectId,\n        draftId: ctx.draftId || null,\n        kind: 'DRAFT',\n        status: 'FAILURE',\n        errorMessage: String(message).slice(0, 500)\n      },\n      response: { accepted: false, correlationId: ctx.correlationId, error: 'Draft generation failed' }\n    }\n  }];\n}\ntry {\n  const http = $input.first().json;\n  let content = http && http.choices && http.choices[0] && http.choices[0].message\n    ? http.choices[0].message.content : null;\n  if (!content) return fail('Invalid LLM response: no content');\n  content = String(content).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(content);\n  const subject = String(parsed.subject || '').trim().slice(0, 300);\n  const body = String(parsed.body || '').trim();\n  if (!subject || !body) return fail('Invalid draft: subject or body missing');\n  return [{\n    json: {\n      callback: {\n        correlationId: ctx.correlationId,\n        prospectId: ctx.prospectId,\n        draftId: ctx.draftId || null,\n        kind: 'DRAFT',\n        status: 'SUCCESS',\n        subject: subject,\n        body: body\n      },\n      response: { accepted: true, correlationId: ctx.correlationId, status: 'PENDING_REVIEW' }\n    }\n  }];\n} catch (error) {\n  return fail(error && error.message ? error.message : 'Invalid LLM JSON');\n}"
+        },
+        "id": "code-019",
+        "name": "Parse Draft",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.BACKEND_CALLBACK_URL + \"/email\" }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-LeadFlow-Secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.callback) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-020",
+        "name": "Send Draft Callback",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          840,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}"
+        },
+        "id": "respond-021",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1080,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}",
+          "options": {
+            "responseCode": 401
+          }
+        },
+        "id": "respond-022",
+        "name": "Respond Unauthorized",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          120,
+          220
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Verify and Validate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify and Validate": {
+        "main": [
+          [
+            {
+              "node": "Is Authorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Authorized": {
+        "main": [
+          [
+            {
+              "node": "Build LLM Request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Unauthorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build LLM Request": {
+        "main": [
+          [
+            {
+              "node": "Call Groq",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Groq": {
+        "main": [
+          [
+            {
+              "node": "Parse Draft",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Draft": {
+        "main": [
+          [
+            {
+              "node": "Send Draft Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Draft Callback": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "errorWorkflow": "9f3c2a11-7b44-4e0d-9a1f-2c8e5d6b7a90"
+    },
+    "versionId": "version-036",
+    "id": "2d5f8c41-0e3b-4a22-9d44-1b2c3d4e5f60",
+    "tags": [],
+    "pinData": {}
+  },
+  {
+    "name": "WF-03 - Approved Email Sending",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "leadflow/email-send",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-023",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -600,
+          0
+        ],
+        "webhookId": "wh-024"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const item = $input.first().json;\nconst headers = item.headers || {};\nconst expected = $env.N8N_WEBHOOK_SECRET || '';\nconst provided = headers['x-leadflow-secret'] || '';\nfunction safeEqual(a, b) {\n  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;\n  let diff = 0;\n  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;\n}\nfunction reject(message) {\n  return [{ json: { ok: false, responseCode: 401, response: { accepted: false, error: message } } }];\n}\nif (!expected || !safeEqual(provided, expected)) {\n  return reject('Unauthorized webhook call');\n}\nconst body = item.body || item;\nconst required = [\"draftId\",\"prospectId\",\"correlationId\",\"subject\",\"body\"];\nfor (const key of required) {\n  const value = body[key];\n  if (value === undefined || value === null || value === '') {\n    return reject('Missing required field: ' + key);\n  }\n}\nreturn [{ json: Object.assign({}, body, { ok: true }) }];"
+        },
+        "id": "code-025",
+        "name": "Verify and Validate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -360,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "condition-026",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": "true",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-027",
+        "name": "Is Authorized",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          -120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ctx = $('Verify and Validate').first().json;\nconst provider = String($env.EMAIL_PROVIDER || 'console').toLowerCase();\nconst simulated = provider === 'console' || provider !== 'smtp';\nconst message = simulated\n  ? 'Simulation only: no real email delivered (EMAIL_PROVIDER=' + provider + ')'\n  : 'Real provider configured: implementation required before use';\nreturn [{\n  json: {\n    callback: {\n      correlationId: ctx.correlationId,\n      draftId: ctx.draftId,\n      prospectId: ctx.prospectId,\n      kind: 'EMAIL',\n      status: simulated ? 'SUCCESS' : 'FAILURE',\n      simulated: simulated,\n      provider: provider,\n      errorMessage: simulated ? null : 'No real email provider implemented'\n    },\n    response: {\n      accepted: simulated,\n      correlationId: ctx.correlationId,\n      simulated: simulated,\n      message: message\n    }\n  }\n}];"
+        },
+        "id": "code-028",
+        "name": "Simulated Email Provider",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          120,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.BACKEND_CALLBACK_URL + \"/email\" }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-LeadFlow-Secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.callback) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-029",
+        "name": "Send Email Callback",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          360,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}"
+        },
+        "id": "respond-030",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          600,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify($json.response || { accepted: true }) }}",
+          "options": {
+            "responseCode": 401
+          }
+        },
+        "id": "respond-031",
+        "name": "Respond Unauthorized",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          120,
+          220
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Verify and Validate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verify and Validate": {
+        "main": [
+          [
+            {
+              "node": "Is Authorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Authorized": {
+        "main": [
+          [
+            {
+              "node": "Simulated Email Provider",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Unauthorized",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Simulated Email Provider": {
+        "main": [
+          [
+            {
+              "node": "Send Email Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send Email Callback": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "errorWorkflow": "9f3c2a11-7b44-4e0d-9a1f-2c8e5d6b7a90"
+    },
+    "versionId": "version-037",
+    "id": "3e6a9d52-1f4c-4b33-ae55-2c3d4e5f6071",
+    "tags": [],
+    "pinData": {}
+  },
+  {
+    "name": "WF-04 - Error Handling",
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "errortrigger-032",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const data = $input.first().json || {};\nlet message = String((data.error && data.error.message) || data.message || 'Unknown error');\nfor (const key of ['GROQ_API_KEY', 'N8N_WEBHOOK_SECRET', 'N8N_ENCRYPTION_KEY', 'APP_JWT_SECRET']) {\n  const value = $env[key];\n  if (value) message = message.split(value).join('[REDACTED]');\n}\nmessage = message\n  .replace(/(Bearer\\s+)[A-Za-z0-9._-]+/gi, '$1[REDACTED]')\n  .replace(/(api[_-]?key|password|secret|token)\\s*[=:]\\s*[^,\\s]+/gi, '$1=[REDACTED]')\n  .slice(0, 500);\nconst errorData = data.error || {};\nconst correlationId = errorData.correlationId || data.correlationId || null;\nreturn [{\n  json: {\n    callback: {\n      workflowName: String((data.workflow && data.workflow.name) || 'unknown-workflow').slice(0, 120),\n      correlationId: correlationId,\n      executionId: String((data.execution && data.execution.id) || '').slice(0, 120),\n      message: message\n    }\n  }\n}];"
+        },
+        "id": "code-033",
+        "name": "Sanitize Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.BACKEND_CALLBACK_URL + \"/error\" }}",
+          "authentication": "none",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-LeadFlow-Secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.callback) }}",
+          "options": {
+            "timeout": 20000
+          },
+          "retryOnFail": true,
+          "maxTries": 2,
+          "waitBetweenTries": 1000
+        },
+        "id": "http-034",
+        "name": "Send Failure Callback",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          80,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Sanitize Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sanitize Error": {
+        "main": [
+          [
+            {
+              "node": "Send Failure Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "versionId": "version-038",
+    "id": "9f3c2a11-7b44-4e0d-9a1f-2c8e5d6b7a90",
+    "tags": [],
+    "pinData": {}
+  }
+]

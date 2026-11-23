@@ -1,0 +1,125 @@
+name: leadflow-ai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: leadflow-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-leadflow}
+      POSTGRES_USER: ${POSTGRES_USER:-leadflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_locally}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - leadflow-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadflow} -d ${POSTGRES_DB:-leadflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: leadflow-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/leadflow}
+      POSTGRES_DB: ${POSTGRES_DB:-leadflow}
+      POSTGRES_USER: ${POSTGRES_USER:-leadflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_locally}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET must be set in .env}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:?N8N_WEBHOOK_SECRET must be set in .env}
+      N8N_WEBHOOK_QUALIFY_URL: ${N8N_WEBHOOK_QUALIFY_URL:-http://n8n:5678/webhook/leadflow/qualify}
+      N8N_WEBHOOK_EMAIL_DRAFT_URL: ${N8N_WEBHOOK_EMAIL_DRAFT_URL:-http://n8n:5678/webhook/leadflow/email-draft}
+      N8N_WEBHOOK_EMAIL_SEND_URL: ${N8N_WEBHOOK_EMAIL_SEND_URL:-http://n8n:5678/webhook/leadflow/email-send}
+      BACKEND_CALLBACK_URL: ${BACKEND_CALLBACK_URL:-http://backend:8080/api/v1/automation/callbacks}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      QUALIFICATION_PROMPT_VERSION: ${QUALIFICATION_PROMPT_VERSION:-v1}
+      AI_HTTP_TIMEOUT_MS: ${AI_HTTP_TIMEOUT_MS:-20000}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      TZ: UTC
+    ports:
+      - "${BACKEND_HOST_PORT:-8080}:8080"
+    networks:
+      - leadflow-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:1.82.3
+    container_name: leadflow-n8n
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY must be set in .env}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: UTC
+      TZ: UTC
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:?N8N_WEBHOOK_SECRET must be set in .env}
+      BACKEND_CALLBACK_URL: ${BACKEND_CALLBACK_URL:-http://backend:8080/api/v1/automation/callbacks}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      QUALIFICATION_PROMPT_VERSION: ${QUALIFICATION_PROMPT_VERSION:-v1}
+    ports:
+      - "127.0.0.1:${N8N_HOST_PORT:-5678}:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./infra/n8n/workflows:/workflows:ro
+    networks:
+      - leadflow-net
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:5678/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080/api/v1}
+    container_name: leadflow-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080/api/v1}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3000:3000"
+    networks:
+      - leadflow-net
+    restart: unless-stopped
+
+networks:
+  leadflow-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  n8n-data:
