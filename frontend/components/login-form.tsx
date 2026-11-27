@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useI18n } from '@/lib/i18n';
 
 interface LoginFormProps {
   onSubmit: (email: string, password: string) => Promise<void>;
@@ -17,6 +18,7 @@ export function LoginForm({
   defaultEmail = 'demo@leadflow.ai',
   defaultPassword = 'DemoPass123!',
 }: LoginFormProps) {
+  const { t } = useI18n();
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState(defaultPassword);
   const [pending, setPending] = useState(false);
@@ -36,7 +38,7 @@ export function LoginForm({
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
         <label htmlFor="email" className="text-sm font-medium text-slate-700">
-          Email
+          {t('email')}
         </label>
         <Input
           id="email"
@@ -49,7 +51,7 @@ export function LoginForm({
       </div>
       <div className="space-y-1.5">
         <label htmlFor="password" className="text-sm font-medium text-slate-700">
-          Mot de passe
+          {t('password')}
         </label>
         <Input
           id="password"
@@ -66,7 +68,7 @@ export function LoginForm({
         </p>
       ) : null}
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? 'Connexion…' : 'Se connecter'}
+        {pending ? t('signingIn') : t('signIn')}
       </Button>
     </form>
   );

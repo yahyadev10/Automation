@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { StatusBadge } from '@/components/status-badge';
 
 describe('StatusBadge', () => {
-  it('formats underscore status values and exposes a readable label', () => {
+  it('exposes a translated label for known status values', () => {
     render(<StatusBadge value="PENDING_REVIEW" />);
-    expect(screen.getByText('Pending Review')).toBeInTheDocument();
+    expect(screen.getByText('À relire')).toBeInTheDocument();
   });
 
   it('uses a distinct tone for successful states', () => {

@@ -1,5 +1,7 @@
+'use client';
+
 import { Badge } from '@/components/ui/badge';
-import { statusLabel } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -22,5 +24,6 @@ const tones: Record<string, Tone> = {
 };
 
 export function StatusBadge({ value }: { value: string }) {
+  const { statusLabel } = useI18n();
   return <Badge tone={tones[value] ?? 'neutral'}>{statusLabel(value)}</Badge>;
 }

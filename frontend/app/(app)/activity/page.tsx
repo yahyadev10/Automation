@@ -6,10 +6,11 @@ import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/state';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 
 export default function ActivityPage() {
   const router = useRouter();
+  const { t, formatDate, localizeActivityDescription } = useI18n();
   const { data, error, loading, reload } = useResource(
     () => api.activity(0, 50),
     'activity',
@@ -19,16 +20,14 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Activité</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Journal chronologique des événements enregistrés par le backend.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t('activityTitle')}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t('activitySubtitle')}</p>
       </header>
 
-      {loading ? <LoadingState label="Chargement de l’historique…" /> : null}
+      {loading ? <LoadingState label={t('loadingActivity')} /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {data && data.content.length === 0 ? (
-        <EmptyState title="Aucun événement" description="Les actions apparaîtront ici au fur et à mesure." />
+        <EmptyState title={t('noEvent')} description={t('noEventDescription')} />
       ) : null}
 
       {data && data.content.length > 0 ? (
@@ -45,7 +44,9 @@ export default function ActivityPage() {
                     {formatDate(event.createdAt)}
                   </time>
                 </div>
-                <p className="mt-2 text-sm text-slate-800">{event.description}</p>
+                <p className="mt-2 text-sm text-slate-800">
+                  {localizeActivityDescription(event.description)}
+                </p>
                 {Object.keys(event.metadata).length > 0 ? (
                   <pre className="mt-3 overflow-x-auto rounded-md bg-slate-50 p-3 text-xs text-slate-600">
                     {JSON.stringify(event.metadata, null, 2)}

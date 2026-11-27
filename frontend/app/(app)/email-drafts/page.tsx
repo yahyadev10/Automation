@@ -7,20 +7,21 @@ import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/state';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 import type { DraftStatus } from '@/lib/types';
 
-const filters: Array<{ value: DraftStatus | ''; label: string }> = [
-  { value: '', label: 'Tous' },
-  { value: 'PENDING_REVIEW', label: 'À relire' },
-  { value: 'APPROVED', label: 'Approuvés' },
-  { value: 'SENT', label: 'Envoyés' },
-  { value: 'REJECTED', label: 'Rejetés' },
-  { value: 'FAILED', label: 'Échecs' },
-];
+const draftFilters = [
+  { value: '', key: 'all' },
+  { value: 'PENDING_REVIEW', key: 'filterPendingReview' },
+  { value: 'APPROVED', key: 'filterApproved' },
+  { value: 'SENT', key: 'filterSent' },
+  { value: 'REJECTED', key: 'filterRejected' },
+  { value: 'FAILED', key: 'filterFailed' },
+] as const;
 
 export default function EmailDraftsPage() {
   const router = useRouter();
+  const { t, formatDate } = useI18n();
   const [status, setStatus] = useState<DraftStatus | ''>('');
   const [page, setPage] = useState(0);
 
@@ -33,14 +34,12 @@ export default function EmailDraftsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Brouillons email</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Chaque envoi nécessite une approbation explicite depuis la fiche du brouillon.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t('draftsTitle')}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t('draftsSubtitle')}</p>
       </header>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par statut">
-        {filters.map((filter) => (
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t('filterByStatus')}>
+        {draftFilters.map((filter) => (
           <button
             key={filter.value}
             type="button"
@@ -54,17 +53,17 @@ export default function EmailDraftsPage() {
                 : 'rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
             }
           >
-            {filter.label}
+            {t(filter.key)}
           </button>
         ))}
       </div>
 
-      {loading ? <LoadingState label="Chargement des brouillons…" /> : null}
+      {loading ? <LoadingState label={t('loadingDrafts')} /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {data && data.content.length === 0 ? (
         <EmptyState
-          title="Aucun brouillon"
-          description="Générez un brouillon depuis la fiche d’un prospect qualifié."
+          title={t('noDraft')}
+          description={t('noDraftDescription')}
         />
       ) : null}
 
@@ -83,13 +82,13 @@ export default function EmailDraftsPage() {
                   href={`/email-drafts/${draft.id}`}
                   className="text-sm font-medium text-slate-700 hover:text-slate-900"
                 >
-                  Ouvrir
+                  {t('open')}
                 </Link>
               </li>
             ))}
           </ul>
           <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500">
-            <span>{data.totalElements} brouillon(s)</span>
+            <span>{t(data.totalElements === 1 ? 'draftOne' : 'draftMany', { count: data.totalElements })}</span>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -97,7 +96,7 @@ export default function EmailDraftsPage() {
                 disabled={page === 0}
                 onClick={() => setPage((value) => Math.max(0, value - 1))}
               >
-                Précédent
+                {t('previous')}
               </button>
               <button
                 type="button"
@@ -105,7 +104,7 @@ export default function EmailDraftsPage() {
                 disabled={page + 1 >= data.totalPages}
                 onClick={() => setPage((value) => value + 1)}
               >
-                Suivant
+                {t('next')}
               </button>
             </div>
           </div>

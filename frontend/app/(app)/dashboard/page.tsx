@@ -7,58 +7,61 @@ import { api } from '@/lib/api';
 import { useResource } from '@/hooks/use-resource';
 import { ErrorState, LoadingState } from '@/components/state';
 import { StatusBadge } from '@/components/status-badge';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 
-const statusEntries = [
-  ['NEW', 'Nouveaux'],
-  ['ANALYZING', 'En analyse'],
-  ['QUALIFIED', 'Qualifiés'],
-  ['NOT_QUALIFIED', 'Non qualifiés'],
-  ['ERROR', 'Erreurs'],
-] as const;
+const statusKeys = ['NEW', 'ANALYZING', 'QUALIFIED', 'NOT_QUALIFIED', 'ERROR'] as const;
 
-const categoryEntries = [
-  ['HIGH', 'Score élevé'],
-  ['MEDIUM', 'Score moyen'],
-  ['LOW', 'Score faible'],
-] as const;
+const statusLabels = {
+  NEW: 'statusNew',
+  ANALYZING: 'statusAnalyzing',
+  QUALIFIED: 'statusQualified',
+  NOT_QUALIFIED: 'statusNotQualified',
+  ERROR: 'statusError',
+} as const;
+
+const categoryKeys = ['HIGH', 'MEDIUM', 'LOW'] as const;
+
+const categoryLabels = {
+  HIGH: 'categoryHigh',
+  MEDIUM: 'categoryMedium',
+  LOW: 'categoryLow',
+} as const;
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { t, formatDate, localizeActivityDescription } = useI18n();
   const { data, error, loading, reload } = useResource(
     () => api.dashboard(),
     'dashboard',
     () => router.replace('/login'),
   );
 
-  if (loading) return <LoadingState label="Chargement du tableau de bord…" />;
+  if (loading) return <LoadingState label={t('loadingDashboard')} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
   const stats = [
-    { label: 'Prospects', value: data.totalProspects, icon: Users, hint: 'Total enregistré' },
-    { label: 'Qualifiés', value: data.qualifiedProspects, icon: Target, hint: 'Statut QUALIFIED' },
-    { label: 'Analyses', value: data.analysesCount, icon: FileSpreadsheet, hint: 'Résultats IA' },
-    { label: 'À relire', value: data.pendingDrafts, icon: Mail, hint: 'Brouillons en attente' },
+    { label: t('statProspects'), value: data.totalProspects, icon: Users, hint: t('hintTotalRecorded') },
+    { label: t('statQualified'), value: data.qualifiedProspects, icon: Target, hint: t('hintQualifiedStatus') },
+    { label: t('statAnalyses'), value: data.analysesCount, icon: FileSpreadsheet, hint: t('hintAiResults') },
+    { label: t('statPendingDrafts'), value: data.pendingDrafts, icon: Mail, hint: t('hintPendingDrafts') },
   ];
 
   return (
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Vue d’ensemble</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Indicateurs calculés depuis PostgreSQL et activités récentes.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t('dashboardTitle')}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t('dashboardSubtitle')}</p>
         </div>
         {data.demoMode ? (
           <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-            Données de démonstration
+            {t('demoData')}
           </span>
         ) : null}
       </header>
 
-      <section aria-label="Indicateurs principaux" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label={t('keyMetrics')} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -76,38 +79,44 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-900">Répartition des prospects</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('prospectDistribution')}</h2>
           <BarList
-            entries={statusEntries.map(([key, label]) => [label, data.prospectsByStatus[key] ?? 0])}
+            entries={statusKeys.map((key) => [
+              t(statusLabels[key]),
+              data.prospectsByStatus[key] ?? 0,
+            ])}
           />
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-900">Catégories d’analyse</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('analysisCategories')}</h2>
           <BarList
-            entries={categoryEntries.map(([key, label]) => [label, data.analysesByCategory[key] ?? 0])}
+            entries={categoryKeys.map((key) => [
+              t(categoryLabels[key]),
+              data.analysesByCategory[key] ?? 0,
+            ])}
           />
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Dernières activités</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('recentActivity')}</h2>
           <Link
             href="/activity"
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
           >
-            Voir tout <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+            {t('viewAll')} <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
           </Link>
         </div>
         {data.recentActivity.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-slate-500">Aucune activité pour le moment.</p>
+          <p className="px-5 py-8 text-sm text-slate-500">{t('noActivityYet')}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.recentActivity.slice(0, 8).map((activity) => (
               <li key={activity.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                 <StatusBadge value={activity.eventType} />
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
-                  {activity.description}
+                  {localizeActivityDescription(activity.description)}
                 </span>
                 <time className="text-xs text-slate-500" dateTime={activity.createdAt}>
                   {formatDate(activity.createdAt)}

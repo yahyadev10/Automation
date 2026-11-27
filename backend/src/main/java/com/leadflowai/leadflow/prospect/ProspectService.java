@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -51,7 +52,9 @@ public class ProspectService {
 
     public PageResponse<ProspectResponse> list(ProspectStatus status, String search,
                                                Pageable pageable, User owner) {
-        String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
+        String normalizedSearch = search == null || search.isBlank()
+                ? null
+                : "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
         return PageResponse.from(repository.search(owner.getId(), status, normalizedSearch, pageable)
                 .map(Mappers::toProspect));
     }

@@ -10,11 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { StatusBadge } from '@/components/status-badge';
 import { ErrorState, LoadingState } from '@/components/state';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 import type { DraftUpdatePayload } from '@/lib/api';
 
 export function EmailDraftDetailView({ id }: { id: string }) {
   const router = useRouter();
+  const { t, formatDate, localizeApiMessage } = useI18n();
   const { data, error, loading, reload, setData } = useResource(
     () => api.draft(id),
     `draft:${id}`,
@@ -34,13 +35,13 @@ export function EmailDraftDetailView({ id }: { id: string }) {
       setNotice(message);
       reload();
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : 'Action impossible');
+      setActionError(localizeApiMessage(cause instanceof Error ? cause.message : t('actionFailed')));
     } finally {
       setBusy(false);
     }
   };
 
-  if (loading) return <LoadingState label="Chargement du brouillon…" />;
+  if (loading) return <LoadingState label={t('loadingDraft')} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
@@ -54,33 +55,35 @@ export function EmailDraftDetailView({ id }: { id: string }) {
         setData(updated);
         setForm(null);
       },
-      'Brouillon mis à jour.',
+      t('draftSaved'),
     );
 
   const send = () => {
-    if (!window.confirm('Confirmer l’envoi de ce brouillon ? Cette action est définitive.')) return;
+    if (!window.confirm(t('confirmSend'))) return;
     void run(
       async () => {
-        const result = await api.sendDraft(id);
-        setNotice(result.message);
+        await api.sendDraft(id);
         setTimeout(() => reload(), 3000);
         setTimeout(() => reload(), 8000);
       },
-      'Demande d’envoi transmise.',
+      t('sendRequested'),
     );
   };
 
   return (
     <div className="space-y-6">
       <Link href="/email-drafts" className="text-sm text-slate-500 hover:text-slate-900">
-        ← Retour aux brouillons
+        {t('backToDrafts')}
       </Link>
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Brouillon</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t('draftTitle')}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Créé le {formatDate(data.createdAt)} · mis à jour le {formatDate(data.updatedAt)}
+            {t('createdUpdated', {
+              created: formatDate(data.createdAt),
+              updated: formatDate(data.updatedAt),
+            })}
           </p>
         </div>
         <StatusBadge value={data.status} />
@@ -95,7 +98,7 @@ export function EmailDraftDetailView({ id }: { id: string }) {
 
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">Objet</span>
+          <span className="text-sm font-medium text-slate-700">{t('subject')}</span>
           <Input
             value={values.subject}
             disabled={!editable}
@@ -103,7 +106,7 @@ export function EmailDraftDetailView({ id }: { id: string }) {
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-700">Contenu</span>
+          <span className="text-sm font-medium text-slate-700">{t('content')}</span>
           <Textarea
             rows={14}
             value={values.body}
@@ -114,7 +117,7 @@ export function EmailDraftDetailView({ id }: { id: string }) {
         {editable ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={save} disabled={busy || !form}>
-              Enregistrer
+              {t('save')}
             </Button>
             <Button
               variant="primary"
@@ -125,41 +128,39 @@ export function EmailDraftDetailView({ id }: { id: string }) {
                     setData(await api.approveDraft(id));
                     setForm(null);
                   },
-                  'Brouillon approuvé. L’envoi reste manuel.',
+                  t('approvedNotice'),
                 )
               }
               disabled={busy}
             >
-              <Check className="h-4 w-4" aria-hidden="true" /> Approuver
+              <Check className="h-4 w-4" aria-hidden="true" /> {t('approve')}
             </Button>
             <Button
               variant="danger"
               onClick={() =>
                 run(
                   async () => setData(await api.rejectDraft(id)),
-                  'Brouillon rejeté.',
+                  t('rejectedNotice'),
                 )
               }
               disabled={busy}
             >
-              <X className="h-4 w-4" aria-hidden="true" /> Rejeter
+              <X className="h-4 w-4" aria-hidden="true" /> {t('reject')}
             </Button>
           </div>
         ) : null}
         {data.status === 'APPROVED' ? (
           <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
             <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />
-            <p className="text-sm text-slate-600">
-              Envoi simulé par défaut : aucun email réel n’est livré.
-            </p>
+            <p className="text-sm text-slate-600">{t('sendSimulationNotice')}</p>
             <Button onClick={send} disabled={busy} className="ml-auto">
-              <Send className="h-4 w-4" aria-hidden="true" /> Envoyer
+              <Send className="h-4 w-4" aria-hidden="true" /> {t('send')}
             </Button>
           </div>
         ) : null}
         {data.status === 'SENT' && data.sentAt ? (
           <p className="border-t border-slate-200 pt-4 text-sm text-emerald-700">
-            Envoyé (simulation) le {formatDate(data.sentAt)}.
+            {t('sentSimulationOn', { date: formatDate(data.sentAt) })}
           </p>
         ) : null}
       </section>

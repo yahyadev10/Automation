@@ -83,6 +83,16 @@ class BackendIntegrationTest {
         assertEquals(HttpStatus.OK, detail.getStatusCode());
         assertTrue(detail.getBody().contains("Integration Biotech"));
 
+        ResponseEntity<String> list = restTemplate.exchange("/api/v1/prospects",
+                HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        assertEquals(HttpStatus.OK, list.getStatusCode());
+        assertTrue(list.getBody().contains("Integration Biotech"));
+
+        ResponseEntity<String> search = restTemplate.exchange("/api/v1/prospects?search=integration",
+                HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        assertEquals(HttpStatus.OK, search.getStatusCode());
+        assertTrue(search.getBody().contains("Integration Biotech"));
+
         ResponseEntity<String> summary = restTemplate.exchange("/api/v1/dashboard/summary",
                 HttpMethod.GET, new HttpEntity<>(headers), String.class);
         assertEquals(HttpStatus.OK, summary.getStatusCode());

@@ -17,9 +17,9 @@ public interface ProspectRepository extends JpaRepository<Prospect, UUID> {
             where p.deletedAt is null
               and p.owner.id = :ownerId
               and (:status is null or p.status = :status)
-              and (:search is null or lower(p.companyName) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(p.contactName, '')) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(p.industry, '')) like lower(concat('%', :search, '%')))
+              and (:search is null or lower(p.companyName) like :search
+                    or lower(coalesce(p.contactName, '')) like :search
+                    or lower(coalesce(p.industry, '')) like :search)
             """)
     Page<Prospect> search(@Param("ownerId") UUID ownerId,
                           @Param("status") ProspectStatus status,

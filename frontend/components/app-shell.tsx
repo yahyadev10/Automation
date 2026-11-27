@@ -11,20 +11,23 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 const links = [
-  { href: '/dashboard', label: 'Vue d’ensemble', icon: LayoutDashboard },
-  { href: '/prospects', label: 'Prospects', icon: Users },
-  { href: '/email-drafts', label: 'Brouillons', icon: Mail },
-  { href: '/activity', label: 'Activité', icon: Activity },
-];
+  { href: '/dashboard', key: 'navDashboard', icon: LayoutDashboard },
+  { href: '/prospects', key: 'navProspects', icon: Users },
+  { href: '/email-drafts', key: 'navDrafts', icon: Mail },
+  { href: '/activity', key: 'navActivity', icon: Activity },
+] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { t } = useI18n();
 
   const logout = async () => {
     await api.logout().catch(() => undefined);
@@ -45,10 +48,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
           <p className="hidden text-xs text-slate-500 lg:mt-2 lg:block">
-            Qualification assistée par IA
+            {t('appTagline')}
           </p>
+          <LanguageSwitcher className="hidden lg:flex lg:mt-3" />
         </div>
-        <nav aria-label="Navigation principale" className="flex overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:px-3 lg:pb-6">
+        <nav aria-label={t('mainNavigation')} className="flex overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:px-3 lg:pb-6">
           {links.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             const Icon = link.icon;
@@ -65,30 +69,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
-                {link.label}
+                {t(link.key)}
               </Link>
             );
           })}
         </nav>
         <div className="hidden border-t border-slate-200 px-5 py-4 lg:block">
           <p className="truncate text-sm font-medium text-slate-800">
-            {user?.fullName || user?.email || 'Compte'}
+            {user?.fullName || user?.email || t('account')}
           </p>
           <p className="mt-1 text-xs text-slate-500">{user?.role ?? '—'}</p>
           <Button variant="ghost" onClick={logout} className="mt-3 w-full justify-start px-0">
             <LogOut className="h-4 w-4" aria-hidden="true" />
-            Déconnexion
+            {t('logout')}
           </Button>
         </div>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
           <span className="text-sm font-semibold text-slate-900">LeadFlow AI</span>
-          {!loading ? (
-            <Button variant="ghost" onClick={logout} aria-label="Déconnexion">
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            {!loading ? (
+              <Button variant="ghost" onClick={logout} aria-label={t('logout')}>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
       </div>

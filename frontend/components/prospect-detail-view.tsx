@@ -9,10 +9,11 @@ import { useResource } from '@/hooks/use-resource';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { ErrorState, LoadingState } from '@/components/state';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 
 export function ProspectDetailView({ id }: { id: string }) {
   const router = useRouter();
+  const { t, formatDate, localizeApiMessage } = useI18n();
   const { data, error, loading, reload } = useResource(
     () => api.prospect(id),
     `prospect:${id}`,
@@ -29,21 +30,21 @@ export function ProspectDetailView({ id }: { id: string }) {
     try {
       if (kind === 'analysis') {
         const result = await api.qualify(id);
-        setNotice(`${result.message} (${result.correlationId.slice(0, 8)})`);
+        setNotice(`${localizeApiMessage(result.message)} (${result.correlationId.slice(0, 8)})`);
       } else {
         const result = await api.generateDraft(id);
-        setNotice(`${result.message} (${result.correlationId.slice(0, 8)})`);
+        setNotice(`${localizeApiMessage(result.message)} (${result.correlationId.slice(0, 8)})`);
       }
       setTimeout(() => reload(), 3000);
       setTimeout(() => reload(), 8000);
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : 'Action impossible');
+      setActionError(localizeApiMessage(cause instanceof Error ? cause.message : t('actionFailed')));
     } finally {
       setBusy(null);
     }
   };
 
-  if (loading) return <LoadingState label="Chargement du prospect…" />;
+  if (loading) return <LoadingState label={t('loadingProspect')} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (!data) return null;
 
@@ -52,7 +53,7 @@ export function ProspectDetailView({ id }: { id: string }) {
   return (
     <div className="space-y-6">
       <Link href="/prospects" className="text-sm text-slate-500 hover:text-slate-900">
-        ← Retour aux prospects
+        {t('backToProspects')}
       </Link>
 
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -64,13 +65,13 @@ export function ProspectDetailView({ id }: { id: string }) {
             <StatusBadge value={data.status} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {data.industry || 'Secteur non renseigné'} · source {data.source}
+            {data.industry || t('industryNotProvided')} · {t('source')} {data.source}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => runAction('analysis')} disabled={busy !== null}>
             <Sparkles className="h-4 w-4" aria-hidden="true" />
-            {busy === 'analysis' ? 'Analyse en cours…' : 'Analyze with AI'}
+            {busy === 'analysis' ? t('analyzing') : t('analyzeWithAi')}
           </Button>
           <Button
             variant="outline"
@@ -78,7 +79,7 @@ export function ProspectDetailView({ id }: { id: string }) {
             disabled={busy !== null || !latest}
           >
             <FileText className="h-4 w-4" aria-hidden="true" />
-            {busy === 'draft' ? 'Génération…' : 'Générer un brouillon'}
+            {busy === 'draft' ? t('generating') : t('generateDraft')}
           </Button>
         </div>
       </header>
@@ -92,38 +93,38 @@ export function ProspectDetailView({ id }: { id: string }) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="rounded-lg border border-slate-200 bg-white p-5 lg:col-span-1">
-          <h2 className="text-sm font-semibold text-slate-900">Informations</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('information')}</h2>
           <dl className="mt-4 space-y-3 text-sm">
-            <Detail label="Contact" value={data.contactName} />
-            <Detail label="Email" value={data.email} />
-            <Detail label="Site web" value={data.website} />
-            <Detail label="Description" value={data.companyDescription} />
-            <Detail label="Créé le" value={formatDate(data.createdAt)} />
+            <Detail label={t('contact')} value={data.contactName} />
+            <Detail label={t('email')} value={data.email} />
+            <Detail label={t('website')} value={data.website} />
+            <Detail label={t('description')} value={data.companyDescription} />
+            <Detail label={t('createdAt')} value={formatDate(data.createdAt)} />
           </dl>
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-slate-900">Dernière qualification</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('lastQualification')}</h2>
           {!latest ? (
-            <p className="mt-4 text-sm text-slate-500">
-              Aucune analyse. Lancez « Analyze with AI » pour obtenir un score et des recommandations.
-            </p>
+            <p className="mt-4 text-sm text-slate-500">{t('noAnalysisHint')}</p>
           ) : (
             <div className="mt-4 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-3xl font-semibold tracking-tight text-slate-900">{latest.score}</span>
-                <span className="text-sm text-slate-500">/ 100</span>
+                <span className="text-sm text-slate-500">{t('outOf100')}</span>
                 <StatusBadge value={latest.category} />
-                <span className="text-xs text-slate-500">confiance {latest.confidence.toLowerCase()}</span>
+                <span className="text-xs text-slate-500">
+                  {t('confidence')} {latest.confidence.toLowerCase()}
+                </span>
               </div>
               <p className="text-sm leading-relaxed text-slate-700">{latest.summary}</p>
-              <List title="Points forts" items={latest.strengths} />
-              <List title="Faiblesses" items={latest.weaknesses} />
-              <List title="Informations manquantes" items={latest.missingInformation} />
-              <List title="Recommandations" items={latest.recommendations} />
+              <List title={t('strengths')} items={latest.strengths} />
+              <List title={t('weaknesses')} items={latest.weaknesses} />
+              <List title={t('missingInformation')} items={latest.missingInformation} />
+              <List title={t('recommendations')} items={latest.recommendations} />
               <p className="text-xs text-slate-500">
-                Modèle : {latest.modelName || 'non renseigné'} · prompt {latest.promptVersion || '—'} ·{' '}
-                {formatDate(latest.createdAt)}
+                {t('model')} : {latest.modelName || t('notProvided')} · {t('prompt')}{' '}
+                {latest.promptVersion || '—'} · {formatDate(latest.createdAt)}
               </p>
             </div>
           )}
@@ -132,10 +133,10 @@ export function ProspectDetailView({ id }: { id: string }) {
 
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Historique des analyses</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('analysisHistory')}</h2>
         </div>
         {data.analyses.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-slate-500">Aucune analyse enregistrée.</p>
+          <p className="px-5 py-6 text-sm text-slate-500">{t('noAnalysisRecorded')}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.analyses.map((analysis) => (
@@ -154,11 +155,11 @@ export function ProspectDetailView({ id }: { id: string }) {
 
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Brouillons</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{t('draftsSection')}</h2>
         </div>
         {data.drafts.length === 0 ? (
           <p data-draft-ready className="px-5 py-6 text-sm text-slate-500">
-            Aucun brouillon. La génération reste manuelle et nécessite une analyse.
+            {t('noDraftHint')}
           </p>
         ) : (
           <ul data-draft-ready className="divide-y divide-slate-100">
@@ -170,7 +171,7 @@ export function ProspectDetailView({ id }: { id: string }) {
                   href={`/email-drafts/${draft.id}`}
                   className="text-xs font-medium text-slate-600 hover:text-slate-900"
                 >
-                  Ouvrir
+                  {t('open')}
                 </Link>
               </li>
             ))}

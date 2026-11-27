@@ -1,16 +1,21 @@
+'use client';
+
 import { AlertCircle, Inbox, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
 
-export function LoadingState({ label = 'Chargement…' }: { label?: string }) {
+export function LoadingState({ label }: { label?: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-5 py-8 text-sm text-slate-500">
       <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
-      {label}
+      {label ?? t('loading')}
     </div>
   );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useI18n();
   return (
     <div
       role="alert"
@@ -22,7 +27,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       </div>
       {onRetry ? (
         <Button variant="outline" onClick={onRetry} className="self-start">
-          Réessayer
+          {t('retry')}
         </Button>
       ) : null}
     </div>

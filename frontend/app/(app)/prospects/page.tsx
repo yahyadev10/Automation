@@ -10,17 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/state';
-import { formatDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 import type { ProspectStatus } from '@/lib/types';
 
-const filters: Array<{ value: ProspectStatus | ''; label: string }> = [
-  { value: '', label: 'Tous' },
-  { value: 'NEW', label: 'Nouveaux' },
-  { value: 'ANALYZING', label: 'En analyse' },
-  { value: 'QUALIFIED', label: 'Qualifiés' },
-  { value: 'NOT_QUALIFIED', label: 'Non qualifiés' },
-  { value: 'ERROR', label: 'Erreurs' },
-];
+const statusFilters = [
+  { value: '', key: 'all' },
+  { value: 'NEW', key: 'statusNew' },
+  { value: 'ANALYZING', key: 'statusAnalyzing' },
+  { value: 'QUALIFIED', key: 'statusQualified' },
+  { value: 'NOT_QUALIFIED', key: 'statusNotQualified' },
+  { value: 'ERROR', key: 'statusError' },
+] as const;
 
 const emptyForm: ProspectCreatePayload = {
   companyName: '',
@@ -34,6 +34,7 @@ const emptyForm: ProspectCreatePayload = {
 
 export default function ProspectsPage() {
   const router = useRouter();
+  const { t, formatDate, localizeApiMessage } = useI18n();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<ProspectStatus | ''>('');
   const [page, setPage] = useState(0);
@@ -59,7 +60,7 @@ export default function ProspectsPage() {
       setPage(0);
       reload();
     } catch (cause) {
-      setFormError(cause instanceof Error ? cause.message : 'Création impossible');
+      setFormError(localizeApiMessage(cause instanceof Error ? cause.message : t('createFailed')));
     } finally {
       setSaving(false);
     }
@@ -69,52 +70,50 @@ export default function ProspectsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Prospects</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Recherchez, filtrez et lancez l’analyse des entreprises suivies.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t('prospectsTitle')}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t('prospectsSubtitle')}</p>
         </div>
         <Button onClick={() => setShowForm((value) => !value)}>
           <Plus className="h-4 w-4" aria-hidden="true" />
-          {showForm ? 'Fermer le formulaire' : 'Nouveau prospect'}
+          {showForm ? t('closeForm') : t('newProspect')}
         </Button>
       </header>
 
       {showForm ? (
         <form onSubmit={create} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 md:grid-cols-2">
-          <Field label="Entreprise" required>
+          <Field label={t('company')} required>
             <Input
               required
               value={form.companyName}
               onChange={(event) => setForm({ ...form, companyName: event.target.value })}
             />
           </Field>
-          <Field label="Contact">
+          <Field label={t('contact')}>
             <Input
               value={form.contactName ?? ''}
               onChange={(event) => setForm({ ...form, contactName: event.target.value })}
             />
           </Field>
-          <Field label="Email">
+          <Field label={t('email')}>
             <Input
               type="email"
               value={form.email ?? ''}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
             />
           </Field>
-          <Field label="Secteur">
+          <Field label={t('industry')}>
             <Input
               value={form.industry ?? ''}
               onChange={(event) => setForm({ ...form, industry: event.target.value })}
             />
           </Field>
-          <Field label="Site web" className="md:col-span-2">
+          <Field label={t('website')} className="md:col-span-2">
             <Input
               value={form.website ?? ''}
               onChange={(event) => setForm({ ...form, website: event.target.value })}
             />
           </Field>
-          <Field label="Description" required className="md:col-span-2">
+          <Field label={t('description')} required className="md:col-span-2">
             <Textarea
               required
               rows={3}
@@ -129,7 +128,7 @@ export default function ProspectsPage() {
           ) : null}
           <div className="md:col-span-2">
             <Button type="submit" disabled={saving}>
-              {saving ? 'Création…' : 'Créer le prospect'}
+              {saving ? t('creating') : t('createProspect')}
             </Button>
           </div>
         </form>
@@ -139,8 +138,8 @@ export default function ProspectsPage() {
         <div className="relative min-w-56 flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
           <Input
-            aria-label="Rechercher un prospect"
-            placeholder="Rechercher une entreprise ou un contact…"
+            aria-label={t('searchProspect')}
+            placeholder={t('searchPlaceholder')}
             className="pl-9"
             value={search}
             onChange={(event) => {
@@ -149,8 +148,8 @@ export default function ProspectsPage() {
             }}
           />
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par statut">
-          {filters.map((filter) => (
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t('filterByStatus')}>
+          {statusFilters.map((filter) => (
             <button
               key={filter.value}
               type="button"
@@ -164,18 +163,18 @@ export default function ProspectsPage() {
                   : 'rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
               }
             >
-              {filter.label}
+              {t(filter.key)}
             </button>
           ))}
         </div>
       </div>
 
-      {loading ? <LoadingState label="Chargement des prospects…" /> : null}
+      {loading ? <LoadingState label={t('loadingProspects')} /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {data && data.content.length === 0 ? (
         <EmptyState
-          title="Aucun prospect"
-          description="Créez un prospect ou ajustez vos filtres pour afficher des résultats."
+          title={t('noProspect')}
+          description={t('noProspectDescription')}
         />
       ) : null}
       {data && data.content.length > 0 ? (
@@ -183,11 +182,11 @@ export default function ProspectsPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th scope="col" className="px-5 py-3 font-medium">Entreprise</th>
-                <th scope="col" className="px-5 py-3 font-medium">Contact</th>
-                <th scope="col" className="px-5 py-3 font-medium">Statut</th>
-                <th scope="col" className="px-5 py-3 font-medium">Créé le</th>
-                <th scope="col" className="px-5 py-3 text-right font-medium">Action</th>
+                <th scope="col" className="px-5 py-3 font-medium">{t('tableCompany')}</th>
+                <th scope="col" className="px-5 py-3 font-medium">{t('tableContact')}</th>
+                <th scope="col" className="px-5 py-3 font-medium">{t('tableStatus')}</th>
+                <th scope="col" className="px-5 py-3 font-medium">{t('tableCreatedAt')}</th>
+                <th scope="col" className="px-5 py-3 text-right font-medium">{t('tableAction')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -195,7 +194,7 @@ export default function ProspectsPage() {
                 <tr key={prospect.id} className="hover:bg-slate-50/70">
                   <td className="px-5 py-3">
                     <p className="font-medium text-slate-900">{prospect.companyName}</p>
-                    <p className="text-xs text-slate-500">{prospect.industry || 'Secteur non renseigné'}</p>
+                    <p className="text-xs text-slate-500">{prospect.industry || t('industryNotProvided')}</p>
                   </td>
                   <td className="px-5 py-3 text-slate-600">{prospect.contactName || '—'}</td>
                   <td className="px-5 py-3"><StatusBadge value={prospect.status} /></td>
@@ -205,7 +204,7 @@ export default function ProspectsPage() {
                       href={`/prospects/${prospect.id}`}
                       className="text-sm font-medium text-slate-700 hover:text-slate-900"
                     >
-                      Ouvrir
+                      {t('open')}
                     </Link>
                   </td>
                 </tr>
@@ -214,8 +213,11 @@ export default function ProspectsPage() {
           </table>
           <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500">
             <span>
-              {data.totalElements} résultat{data.totalElements > 1 ? 's' : ''} — page {data.page + 1} /{' '}
-              {Math.max(1, data.totalPages)}
+              {t(data.totalElements === 1 ? 'resultOne' : 'resultMany', {
+                count: data.totalElements,
+                page: data.page + 1,
+                pages: Math.max(1, data.totalPages),
+              })}
             </span>
             <div className="flex gap-2">
               <Button
@@ -223,14 +225,14 @@ export default function ProspectsPage() {
                 disabled={page === 0}
                 onClick={() => setPage((value) => Math.max(0, value - 1))}
               >
-                <ArrowLeft className="h-3 w-3" aria-hidden="true" /> Précédent
+                <ArrowLeft className="h-3 w-3" aria-hidden="true" /> {t('previous')}
               </Button>
               <Button
                 variant="outline"
                 disabled={page + 1 >= data.totalPages}
                 onClick={() => setPage((value) => value + 1)}
               >
-                Suivant <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                {t('next')} <ArrowRight className="h-3 w-3" aria-hidden="true" />
               </Button>
             </div>
           </div>

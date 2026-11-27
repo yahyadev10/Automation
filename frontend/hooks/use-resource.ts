@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 export function useResource<T>(
   loader: () => Promise<T>,
   key: string,
   onUnauthorized?: () => void,
 ) {
+  const { t } = useI18n();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +36,7 @@ export function useResource<T>(
           unauthorizedRef.current?.();
           return;
         }
-        setError(cause instanceof Error ? cause.message : 'Erreur inconnue');
+        setError(cause instanceof Error ? cause.message : t('unknownError'));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -42,7 +44,7 @@ export function useResource<T>(
     return () => {
       active = false;
     };
-  }, [key, version]);
+  }, [key, version, t]);
 
   return { data, error, loading, reload, setData };
 }
